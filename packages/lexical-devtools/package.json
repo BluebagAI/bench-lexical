@@ -1,0 +1,50 @@
+{
+  "name": "@lexical/devtools",
+  "description": "Lexical DevTools browser extension",
+  "private": true,
+  "version": "0.53.0",
+  "type": "module",
+  "scripts": {
+    "dev": "wxt",
+    "dev:firefox": "wxt -b firefox",
+    "dev:edge": "wxt -b edge",
+    "dev:safari": "pnpm run build:safari --mode development && xcodebuild -configuration Debug -scheme Lexical\\ Developer\\ Tools -project ./safari-xcode//Lexical\\ Developer\\ Tools/Lexical\\ Developer\\ Tools.xcodeproj && echo \"Open Safari, allow unsigned extensions in developer settings, enable extension in extensions manager (if needed)\"",
+    "build": "npm-run-all build:chrome build:firefox build:safari",
+    "build:chrome": "wxt build -b chrome",
+    "build:firefox": "wxt build -b firefox",
+    "build:safari": "wxt build -b safari",
+    "zip": "npm-run-all zip:chrome zip:firefox",
+    "zip:chrome": "wxt zip -b chrome",
+    "zip:firefox": "cp ./SOURCE_CODE_REVIEW.md ../.. && wxt zip -b firefox",
+    "publish": "wxt submit --chrome-api-version v2 --chrome-publish-type DEFAULT_PUBLISH --chrome-zip .output/*-chrome.zip --firefox-zip .output/*-firefox.zip --firefox-sources-zip .output/*-sources.zip",
+    "bundle-analyzer:open": "wxt build --analyze --analyze-open",
+    "compile": "tsc --noEmit",
+    "postinstall": "wxt prepare"
+  },
+  "dependencies": {
+    "@chakra-ui/react": "^3.35.0",
+    "@emotion/react": "^11.11.4",
+    "@emotion/styled": "^11.11.5",
+    "@webext-pegasus/rpc": "^0.3.0",
+    "@webext-pegasus/store-zustand": "^0.3.0",
+    "@webext-pegasus/transport": "^0.3.0",
+    "framer-motion": "^11.1.5",
+    "react": "^19.2.5",
+    "react-dom": "^19.2.5",
+    "zustand": "^5.0.12"
+  },
+  "devDependencies": {
+    "@babel/plugin-transform-flow-strip-types": "^8.0.1",
+    "@babel/preset-react": "^8.0.1",
+    "@lexical/devtools-core": "workspace:*",
+    "@rollup/plugin-babel": "^7.1.0",
+    "@types/react": "^19.2.14",
+    "@types/react-dom": "^19.2.3",
+    "@vitejs/plugin-react": "^6.1.1",
+    "lexical": "workspace:*",
+    "typescript": "^6.0.3",
+    "vite": "^8.3.3",
+    "wxt": "^0.21.4"
+  },
+  "sideEffects": false
+}
