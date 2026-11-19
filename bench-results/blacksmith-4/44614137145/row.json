@@ -1,0 +1,29 @@
+{
+ "at": "2026-11-19T21:17:44+00:00",
+ "suite": "lexical",
+ "repo": "BluebagAI/bench-lexical",
+ "runner": "blacksmith-4",
+ "shards": "1",
+ "note": "measured",
+ "run": "https://github.com/BluebagAI/bench-lexical/actions/runs/44614137145",
+ "run_id": 44614137145,
+ "sha": "eec04f579940fa4001b70674716561137b269a0d",
+ "conclusion": "success",
+ "wall_s": 1106,
+ "queue_s": 3,
+ "job_s": 4457,
+ "jobs": 14,
+ "job_max_s": 645,
+ "vcpu_min": 297.1,
+ "billed_min": 81,
+ "usd": 0.648,
+ "tests": {
+  "passed": 4469,
+  "failed": 0,
+  "flaky": 0,
+  "skipped": 2689,
+  "failed_tests": [],
+  "flaky_tests": [],
+  "files": 12
+ }
+}
