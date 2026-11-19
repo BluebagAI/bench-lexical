@@ -1,0 +1,225 @@
+# Benchmark copy of facebook/lexical's call-e2e-all-tests.yml (run by tests-extended.yml): its two
+# Linux build jobs and its 12 Linux Playwright jobs (chromium and firefox in rich-text, plain-text,
+# collab, collab v2 and collab Y, plus prod chromium and prod collab chromium), as upstream lays
+# them out. Left out on every runner: the macOS and Windows build and test jobs (WebKit only runs
+# there) and tests-extended's gate job. fail-fast is off so every job finishes. Same steps and
+# commit on every runner; only the test step differs (Boba step vs upstream's pnpm script with a
+# JSON reporter added). The collab servers that upstream started inside the test step (with
+# concurrently) start in their own step on every runner. Workers (4), retries (2) and the
+# playground web server come from playwright.config.mjs with CI=true.
+name: bench
+on:
+  workflow_dispatch:
+    inputs:
+      runner:
+        type: choice
+        options: [boba-turbo, boba-standard, github-4, blacksmith-4]
+permissions:
+  contents: read
+  checks: write
+  pull-requests: write
+  actions: read
+jobs:
+  build-ubuntu:
+    name: build-ubuntu (${{ inputs.runner }})
+    runs-on: ${{ startsWith(inputs.runner, 'boba') && 'coldtea-boba' || inputs.runner == 'blacksmith-4' && 'blacksmith-4vcpu-ubuntu-2404' || 'ubuntu-latest' }}
+    env:
+      node-version: 24.x
+    steps:
+      - uses: actions/checkout@v7
+      - uses: ./.github/actions/setup-pnpm
+        with:
+          node-version: ${{ env.node-version }}
+      - uses: ./.github/actions/setup-playwright
+        with:
+          node-version: ${{ env.node-version }}
+      - uses: ./.github/actions/setup-playground
+        with:
+          node-version: ${{ env.node-version }}
+
+  build-ubuntu-prod:
+    name: build-ubuntu-prod (${{ inputs.runner }})
+    runs-on: ${{ startsWith(inputs.runner, 'boba') && 'coldtea-boba' || inputs.runner == 'blacksmith-4' && 'blacksmith-4vcpu-ubuntu-2404' || 'ubuntu-latest' }}
+    env:
+      node-version: 24.x
+    steps:
+      - uses: actions/checkout@v7
+      - uses: ./.github/actions/setup-pnpm
+        with:
+          node-version: ${{ env.node-version }}
+      - uses: ./.github/actions/setup-playwright
+        with:
+          node-version: ${{ env.node-version }}
+      - uses: ./.github/actions/setup-playground
+        with:
+          node-version: ${{ env.node-version }}
+          prod: true
+
+  e2e:
+    name: ${{ matrix.name }} (${{ inputs.runner }})
+    needs: build-ubuntu
+    runs-on: ${{ startsWith(inputs.runner, 'boba') && 'coldtea-boba' || inputs.runner == 'blacksmith-4' && 'blacksmith-4vcpu-ubuntu-2404' || 'ubuntu-latest' }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { name: 'linux (chromium, rich-text)', id: linux-chromium-rich-text, browser: chromium, mode: rich-text, script: test-e2e-chromium, collab: '', port: '' }
+          - { name: 'linux (chromium, plain-text)', id: linux-chromium-plain-text, browser: chromium, mode: plain-text, script: test-e2e-chromium, collab: '', port: '' }
+          - { name: 'linux (firefox, rich-text)', id: linux-firefox-rich-text, browser: firefox, mode: rich-text, script: test-e2e-firefox, collab: '', port: '' }
+          - { name: 'linux (firefox, plain-text)', id: linux-firefox-plain-text, browser: firefox, mode: plain-text, script: test-e2e-firefox, collab: '', port: '' }
+          - { name: 'collab-linux (chromium)', id: collab-linux-chromium, browser: chromium, mode: rich-text-with-collab, script: test-e2e-collab-chromium, collab: collab, port: '1234' }
+          - { name: 'collab-linux (firefox)', id: collab-linux-firefox, browser: firefox, mode: rich-text-with-collab, script: test-e2e-collab-firefox, collab: collab, port: '1234' }
+          - { name: 'collab-v2-linux (chromium)', id: collab-v2-linux-chromium, browser: chromium, mode: rich-text-with-collab-v2, script: test-e2e-collab-v2-chromium, collab: collab, port: '1234' }
+          - { name: 'collab-v2-linux (firefox)', id: collab-v2-linux-firefox, browser: firefox, mode: rich-text-with-collab-v2, script: test-e2e-collab-v2-firefox, collab: collab, port: '1234' }
+          - { name: 'collab-y-linux (chromium)', id: collab-y-linux-chromium, browser: chromium, mode: rich-text-with-collab-y, script: test-e2e-collab-y-chromium, collab: 'collab:y', port: '1235' }
+          - { name: 'collab-y-linux (firefox)', id: collab-y-linux-firefox, browser: firefox, mode: rich-text-with-collab-y, script: test-e2e-collab-y-firefox, collab: 'collab:y', port: '1235' }
+    env:
+      CI: true
+      E2E_EDITOR_MODE: ${{ matrix.mode }}
+      E2E_PORT: 4000
+      test_results_path: 'test-results/'
+    steps:
+      - uses: actions/checkout@v7
+      - uses: ./.github/actions/setup-pnpm
+        with:
+          node-version: 24.x
+      - uses: ./.github/actions/setup-playground
+        with:
+          node-version: 24.x
+      - uses: ./.github/actions/setup-playwright
+        with:
+          node-version: 24.x
+
+      - name: Start the collab server
+        if: matrix.collab != ''
+        shell: bash
+        run: |
+          nohup pnpm run ${{ matrix.collab }} > /tmp/collab-server.log 2>&1 &
+          up() { curl --max-time 3 -s -o /dev/null http://localhost:${{ matrix.port }}/; }
+          for i in $(seq 1 60); do up && break; sleep 1; done
+          if ! up; then
+            echo "::error::The collab server did not respond on :${{ matrix.port }} within 60s"
+            tail -n 100 /tmp/collab-server.log || true
+            exit 1
+          fi
+
+      - name: Run the tests on Boba
+        if: startsWith(inputs.runner, 'boba')
+        uses: coldteadotai/boba@v1
+        with:
+          project: ${{ matrix.browser }}
+          turbo: ${{ inputs.runner == 'boba-turbo' }}
+          fail-fast: false
+        env:
+          E2E_BROWSER: ${{ matrix.browser }}
+          E2E_EDITOR_MODE: ${{ matrix.mode }}
+          E2E_PORT: 4000
+
+      - name: Run the tests
+        if: ${{ !startsWith(inputs.runner, 'boba') }}
+        run: pnpm run ${{ matrix.script }} --shard=1/1 --reporter=dot,json,./packages/lexical-playground/__tests__/utils/timingReporter.mjs
+        env:
+          PLAYWRIGHT_JSON_OUTPUT_FILE: ${{ github.workspace }}/results.json
+
+      - uses: actions/upload-artifact@v7
+        if: ${{ always() && !startsWith(inputs.runner, 'boba') }}
+        with:
+          name: results-${{ inputs.runner }}-${{ matrix.id }}
+          path: results.json
+          retention-days: 30
+      - name: Upload Artifacts
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: Test Results ${{ matrix.id }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ env.test_results_path }}
+          if-no-files-found: ignore
+          retention-days: 7
+      - name: Upload collab server log on failure
+        if: failure() && matrix.collab != ''
+        uses: actions/upload-artifact@v7
+        with:
+          name: collab-server-log-${{ matrix.id }}
+          path: /tmp/collab-server.log
+          retention-days: 7
+
+  e2e-prod:
+    name: ${{ matrix.name }} (${{ inputs.runner }})
+    needs: build-ubuntu-prod
+    runs-on: ${{ startsWith(inputs.runner, 'boba') && 'coldtea-boba' || inputs.runner == 'blacksmith-4' && 'blacksmith-4vcpu-ubuntu-2404' || 'ubuntu-latest' }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { name: 'prod (chromium, rich-text)', id: prod-chromium-rich-text, browser: chromium, mode: rich-text, script: test-e2e-prod-chromium, collab: '', port: '' }
+          - { name: 'collab-prod (chromium, rich-text-with-collab)', id: collab-prod-chromium, browser: chromium, mode: rich-text-with-collab, script: test-e2e-collab-prod-chromium, collab: collab, port: '1234' }
+    env:
+      CI: true
+      E2E_EDITOR_MODE: ${{ matrix.mode }}
+      E2E_PORT: 4000
+      test_results_path: 'test-results/'
+    steps:
+      - uses: actions/checkout@v7
+      - uses: ./.github/actions/setup-pnpm
+        with:
+          node-version: 24.x
+      - uses: ./.github/actions/setup-playground
+        with:
+          node-version: 24.x
+          prod: true
+      - uses: ./.github/actions/setup-playwright
+        with:
+          node-version: 24.x
+
+      - name: Start the collab server
+        if: matrix.collab != ''
+        shell: bash
+        run: |
+          nohup pnpm run ${{ matrix.collab }} > /tmp/collab-server.log 2>&1 &
+          up() { curl --max-time 3 -s -o /dev/null http://localhost:${{ matrix.port }}/; }
+          for i in $(seq 1 60); do up && break; sleep 1; done
+          if ! up; then
+            echo "::error::The collab server did not respond on :${{ matrix.port }} within 60s"
+            tail -n 100 /tmp/collab-server.log || true
+            exit 1
+          fi
+
+      - name: Run the tests on Boba
+        if: startsWith(inputs.runner, 'boba')
+        uses: coldteadotai/boba@v1
+        with:
+          project: ${{ matrix.browser }}
+          turbo: ${{ inputs.runner == 'boba-turbo' }}
+          fail-fast: false
+        env:
+          E2E_BROWSER: ${{ matrix.browser }}
+          E2E_EDITOR_MODE: ${{ matrix.mode }}
+          E2E_PORT: 4000
+
+      - name: Run the tests
+        if: ${{ !startsWith(inputs.runner, 'boba') }}
+        run: pnpm run ${{ matrix.script }} --shard=1/1 --reporter=dot,json,./packages/lexical-playground/__tests__/utils/timingReporter.mjs
+        env:
+          PLAYWRIGHT_JSON_OUTPUT_FILE: ${{ github.workspace }}/results.json
+
+      - uses: actions/upload-artifact@v7
+        if: ${{ always() && !startsWith(inputs.runner, 'boba') }}
+        with:
+          name: results-${{ inputs.runner }}-${{ matrix.id }}
+          path: results.json
+          retention-days: 30
+      - name: Upload Artifacts
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: Test Results ${{ matrix.id }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ env.test_results_path }}
+          if-no-files-found: ignore
+          retention-days: 7
+      - name: Upload collab server log on failure
+        if: failure() && matrix.collab != ''
+        uses: actions/upload-artifact@v7
+        with:
+          name: collab-server-log-${{ matrix.id }}
+          path: /tmp/collab-server.log
+          retention-days: 7
