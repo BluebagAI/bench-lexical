@@ -6,7 +6,8 @@
 # commit on every runner; only the test step differs (Boba step vs upstream's pnpm script with a
 # JSON reporter added). The collab servers that upstream started inside the test step (with
 # concurrently) start in their own step on every runner. Workers (4), retries (2) and the
-# playground web server come from playwright.config.mjs with CI=true.
+# playground web server come from playwright.config.mjs with CI=true. Every test job stops after 30
+# minutes (upstream sets no job timeout).
 name: bench
 on:
   workflow_dispatch:
@@ -58,6 +59,7 @@ jobs:
   e2e:
     name: ${{ matrix.name }} (${{ inputs.runner }})
     needs: build-ubuntu
+    timeout-minutes: 30
     runs-on: ${{ startsWith(inputs.runner, 'boba') && 'coldtea-boba' || inputs.runner == 'blacksmith-4' && 'blacksmith-4vcpu-ubuntu-2404' || 'ubuntu-latest' }}
     strategy:
       fail-fast: false
@@ -107,6 +109,7 @@ jobs:
         if: startsWith(inputs.runner, 'boba')
         uses: coldteadotai/boba@v1
         with:
+          config: playwright.config.mjs
           project: ${{ matrix.browser }}
           turbo: ${{ inputs.runner == 'boba-turbo' }}
           fail-fast: false
@@ -146,6 +149,7 @@ jobs:
   e2e-prod:
     name: ${{ matrix.name }} (${{ inputs.runner }})
     needs: build-ubuntu-prod
+    timeout-minutes: 30
     runs-on: ${{ startsWith(inputs.runner, 'boba') && 'coldtea-boba' || inputs.runner == 'blacksmith-4' && 'blacksmith-4vcpu-ubuntu-2404' || 'ubuntu-latest' }}
     strategy:
       fail-fast: false
@@ -188,6 +192,7 @@ jobs:
         if: startsWith(inputs.runner, 'boba')
         uses: coldteadotai/boba@v1
         with:
+          config: playwright.config.mjs
           project: ${{ matrix.browser }}
           turbo: ${{ inputs.runner == 'boba-turbo' }}
           fail-fast: false
